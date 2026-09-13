@@ -27,11 +27,23 @@ local function InitializeDatabase()
 end
 
 ---
--- Slash command handler - toggles session frame and prints addon info
--- Called when user types /goldroute
+-- Slash command handler - toggles session frame, prints addon info, or shows debug
+-- Called when user types /goldroute or /goldroute debug
 -- https://wowpedia.fandom.com/wiki/SlashCmdList
 ---
 local function OnSlashCommand(msg)
+	-- Trim whitespace and convert to lowercase for case-insensitive comparison
+	msg = msg and msg:match("^%s*(.-)%s*$"):lower() or ""
+	
+	-- Handle debug command
+	if msg == "debug" then
+		if ns.InventoryDebugPrint then
+			ns.InventoryDebugPrint()
+		end
+		return
+	end
+	
+	-- Default behavior: print version and toggle session frame
 	-- print() writes to the default chat frame
 	-- https://wowpedia.fandom.com/wiki/API_print
 	print(addonName .. " v" .. ADDON_VERSION)

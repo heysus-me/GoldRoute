@@ -9,28 +9,35 @@ local acquiredItems = {}
 -- Module-local event frame for bag updates
 local eventFrame = CreateFrame("Frame")
 
+-- Bag IDs to track in player inventory
+-- 0 = backpack, 1-4 = equipped bags, 5 = reagent bag
+local TRACKED_BAGS = {0, 1, 2, 3, 4, 5}
+
 ---
--- Capture the current state of all bags
+-- Capture the current state of all tracked bags
 -- Returns a table: { [itemID] = quantity, ... }
 ---
 local function SnapshotBags()
 	local snapshot = {}
 	
-	-- Scan all bag slots (0 = backpack, 1-4 = main bags)
-	for bagID = 0, 4 do
+	-- Scan all tracked bags (backpack, main bags, reagent bag)
+	for _, bagID in ipairs(TRACKED_BAGS) do
 		-- C_Container.GetContainerNumSlots returns number of slots in a bag
 		local numSlots = C_Container.GetContainerNumSlots(bagID)
 		
-		for slotID = 1, numSlots do
-			-- C_Container.GetContainerItemInfo returns info about a container item
-			local info = C_Container.GetContainerItemInfo(bagID, slotID)
-			
-			if info then
-				local itemID = info.itemID
-				local quantity = info.stackCount or 1
+		-- Skip bags with zero slots (not available)
+		if numSlots and numSlots > 0 then
+			for slotID = 1, numSlots do
+				-- C_Container.GetContainerItemInfo returns info about a container item
+				local info = C_Container.GetContainerItemInfo(bagID, slotID)
 				
-				if itemID then
-					snapshot[itemID] = (snapshot[itemID] or 0) + quantity
+				if info then
+					local itemID = info.itemID
+					local quantity = info.stackCount or 1
+					
+					if itemID then
+						snapshot[itemID] = (snapshot[itemID] or 0) + quantity
+					end
 				end
 			end
 		end
@@ -145,6 +152,34 @@ function ns.GetItemName(itemID)
 	
 	-- If item info is not cached, return fallback
 	return "Item " .. itemID
+end
+
+---
+-- Debug print: show current inventory tracking state
+-- Called by Core.lua when user runs /goldroute debug
+---
+function ns.InventoryDebugPrint()
+	print("GoldRoute inventory tracking: " .. tostring(isTracking))
+	
+	local count = 0
+	for _ in pairs(acquiredItems) do
+		count = count + 1
+	end
+	
+	print("Acquired item types: " .. count)
+	
+	if count > 0 then
+		-- Sort items by ID for consistent output
+		local itemList = {}
+		for itemID, quantity in pairs(acquiredItems) do
+			table.insert(itemList, {id = itemID, qty = quantity})
+		end
+		table.sort(itemList, function(a, b) return a.id < b.id end)
+		
+		for _, item in ipairs(itemList) do
+			print("Item " .. item.id .. ": " .. item.qty)
+		end
+	end
 end
 
 -- Set up event handler for the module-local event frame
