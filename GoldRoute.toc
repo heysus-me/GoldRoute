@@ -1,0 +1,8 @@
+## Interface: 120100
+## Title: GoldRoute
+## Author: 
+## Version: 1.0.0
+## SavedVariables: GoldRouteDB
+## Notes: A World of Warcraft addon for gold farming route tracking and optimization.
+
+Core.lua
