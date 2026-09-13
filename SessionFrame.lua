@@ -109,16 +109,6 @@ local function ClearAcquiredItems()
 end
 
 ---
--- Refresh live acquired items display during active session
--- Called by Inventory.lua when items are acquired during RUNNING or PAUSED state
----
-function ns.RefreshLiveItems()
-	if sessionState == STATE_RUNNING or sessionState == STATE_PAUSED then
-		DisplayAcquiredItems(ns.GetAcquiredItems())
-	end
-end
-
----
 -- Display acquired items from a table of {itemID = quantity, ...}
 -- Shows up to 8 item types sorted by quantity descending
 ---
@@ -136,9 +126,12 @@ local function DisplayAcquiredItems(itemsTable)
 	end
 	
 	-- Collect items into a table for sorting
+	-- Only include valid items: numeric itemID, numeric quantity > 0
 	local items = {}
 	for itemID, quantity in pairs(itemsTable) do
-		table.insert(items, { itemID = itemID, quantity = quantity })
+		if type(itemID) == "number" and type(quantity) == "number" and quantity > 0 then
+			table.insert(items, { itemID = itemID, quantity = quantity })
+		end
 	end
 	
 	if #items == 0 then
@@ -182,6 +175,17 @@ local function DisplayAcquiredItems(itemsTable)
 end
 
 ---
+-- Refresh live acquired items display during active session
+-- Called by Inventory.lua when items are acquired during RUNNING or PAUSED state
+---
+function ns.RefreshLiveItems()
+	if sessionState == STATE_RUNNING or sessionState == STATE_PAUSED then
+		local items = ns.GetAcquiredItems and ns.GetAcquiredItems() or {}
+		DisplayAcquiredItems(items)
+	end
+end
+
+---
 -- Clear all session summary display elements
 ---
 local function ClearSessionSummary()
@@ -211,7 +215,8 @@ local function DisplaySessionSummary(session)
 		goldPerHourText:SetText("Gold / Hour: --")
 	end
 	
-	DisplayAcquiredItems(session)
+	-- Display the acquired items from the session
+	DisplayAcquiredItems(session.items or {})
 end
 
 ---
@@ -333,10 +338,6 @@ local function OnStopSession()
 	if ns.SessionStop then
 		local completedSession = ns.SessionStop(accumulatedElapsed)
 		DisplaySessionSummary(completedSession)
-		-- Display the final acquired items from the completed session
-		if completedSession and completedSession.items then
-			DisplayAcquiredItems(completedSession.items)
-		end
 	end
 end
 
