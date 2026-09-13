@@ -97,36 +97,15 @@ local function UpdateElapsedDisplay()
 end
 
 ---
--- Clear all session summary display elements
+-- Clear acquired items display
 ---
-local function ClearSessionSummary()
-	rawGoldText:SetText("")
-	goldPerHourText:SetText("")
-	ClearAcquiredItems()
-end
-
----
--- Display session summary after stop
----
-local function DisplaySessionSummary(session)
-	if not session then
-		rawGoldText:SetText("Raw Gold: --")
-		goldPerHourText:SetText("Gold / Hour: --")
-		ClearAcquiredItems()
-		return
+local function ClearAcquiredItems()
+	itemsHeaderText:SetText("")
+	if itemDisplayStrings then
+		for i, fontString in ipairs(itemDisplayStrings) do
+			fontString:SetText("")
+		end
 	end
-	
-	local rawGoldStr = FormatCopper(session.rawGoldDelta)
-	rawGoldText:SetText("Raw Gold: " .. rawGoldStr)
-	
-	if session.activeDuration > 0 then
-		local goldPerHour = session.rawGoldDelta / session.activeDuration * 3600
-		goldPerHourText:SetText("Gold / Hour: " .. FormatCopper(goldPerHour))
-	else
-		goldPerHourText:SetText("Gold / Hour: --")
-	end
-	
-	DisplayAcquiredItems(session)
 end
 
 ---
@@ -193,15 +172,36 @@ local function DisplayAcquiredItems(session)
 end
 
 ---
--- Clear acquired items display
+-- Clear all session summary display elements
 ---
-local function ClearAcquiredItems()
-	itemsHeaderText:SetText("")
-	if itemDisplayStrings then
-		for i, fontString in ipairs(itemDisplayStrings) do
-			fontString:SetText("")
-		end
+local function ClearSessionSummary()
+	rawGoldText:SetText("")
+	goldPerHourText:SetText("")
+	ClearAcquiredItems()
+end
+
+---
+-- Display session summary after stop
+---
+local function DisplaySessionSummary(session)
+	if not session then
+		rawGoldText:SetText("Raw Gold: --")
+		goldPerHourText:SetText("Gold / Hour: --")
+		ClearAcquiredItems()
+		return
 	end
+	
+	local rawGoldStr = FormatCopper(session.rawGoldDelta)
+	rawGoldText:SetText("Raw Gold: " .. rawGoldStr)
+	
+	if session.activeDuration > 0 then
+		local goldPerHour = session.rawGoldDelta / session.activeDuration * 3600
+		goldPerHourText:SetText("Gold / Hour: " .. FormatCopper(goldPerHour))
+	else
+		goldPerHourText:SetText("Gold / Hour: --")
+	end
+	
+	DisplayAcquiredItems(session)
 end
 
 ---
