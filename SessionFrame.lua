@@ -1,9 +1,25 @@
 -- GoldRoute Session Frame - UI and session timer management
 local addonName, ns = ...
 
+-- Session states
+local STATE_IDLE = "IDLE"
+local STATE_RUNNING = "RUNNING"
+local STATE_PAUSED = "PAUSED"
+local STATE_STOPPED = "STOPPED"
+
+-- UI elements
 local sessionFrame
-local sessionActive = false
-local sessionStartTime = nil
+local startButton
+local pauseButton
+local stopButton
+local statusText
+local elapsedTimeText
+
+-- Session timer state
+local sessionState = STATE_IDLE
+local accumulatedElapsed = 0
+local segmentStartTime = nil
+local activeTicker = nil
 
 ---
 -- Format elapsed seconds as HH:MM:SS
@@ -16,54 +32,137 @@ local function FormatTime(seconds)
 end
 
 ---
--- Update the elapsed time display once per second
--- Uses C_Timer.After to schedule next update
--- https://wowpedia.fandom.com/wiki/C_Timer.After
+-- Get the current displayed elapsed time
+-- When RUNNING: accumulated + current segment duration
+-- When PAUSED/STOPPED: accumulated only
 ---
-local function UpdateElapsedTime()
-	if not sessionActive or not sessionStartTime then
-		return
+local function GetElapsedTime()
+	if sessionState == STATE_RUNNING and segmentStartTime then
+		return accumulatedElapsed + (GetTime() - segmentStartTime)
+	else
+		return accumulatedElapsed
 	end
-
-	local elapsed = GetTime() - sessionStartTime
-	ns.elapsedTimeText:SetText(FormatTime(elapsed))
-
-	-- Schedule next update in 1 second
-	C_Timer.After(1, UpdateElapsedTime)
 end
 
 ---
--- Start session button handler
--- Stores current time, enables stop button, begins timer updates
+-- Update the elapsed time display text
+-- Called once per second by ticker and immediately on state changes
 ---
-local function StartSession()
-	sessionActive = true
-	sessionStartTime = GetTime()
-	ns.statusText:SetText("Running")
-	ns.elapsedTimeText:SetText("00:00:00")
-	ns.startButton:Disable()
-	ns.stopButton:Enable()
-	UpdateElapsedTime()
+local function UpdateElapsedDisplay()
+	elapsedTimeText:SetText(FormatTime(GetElapsedTime()))
 end
 
 ---
--- Stop session button handler
--- Stops timer, preserves elapsed time on screen
+-- Update button states based on current session state
 ---
-local function StopSession()
-	sessionActive = false
-	ns.statusText:SetText("Stopped")
-	ns.startButton:Enable()
-	ns.stopButton:Disable()
+local function UpdateButtonState()
+	if sessionState == STATE_IDLE then
+		startButton:Enable()
+		pauseButton:Disable()
+		stopButton:Disable()
+		pauseButton:SetText("Pause Session")
+	elseif sessionState == STATE_RUNNING then
+		startButton:Disable()
+		pauseButton:Enable()
+		stopButton:Enable()
+		pauseButton:SetText("Pause Session")
+	elseif sessionState == STATE_PAUSED then
+		startButton:Disable()
+		pauseButton:Enable()
+		stopButton:Enable()
+		pauseButton:SetText("Resume Session")
+	elseif sessionState == STATE_STOPPED then
+		startButton:Enable()
+		pauseButton:Disable()
+		stopButton:Disable()
+		pauseButton:SetText("Pause Session")
+	end
+end
+
+---
+-- Cancel the active ticker if it exists
+-- Called before transitions to prevent duplicate timers
+---
+local function StopTicker()
+	if activeTicker then
+		activeTicker:Cancel()
+		activeTicker = nil
+	end
+end
+
+---
+-- Start a new ticker that updates display once per second
+-- Only called when transitioning to RUNNING state
+---
+local function StartTicker()
+	StopTicker()
+	activeTicker = C_Timer.NewTicker(1, function()
+		UpdateElapsedDisplay()
+	end)
+end
+
+---
+-- Start Session button handler
+-- Initializes a new session from scratch
+---
+local function OnStartSession()
+	StopTicker()
+	accumulatedElapsed = 0
+	segmentStartTime = GetTime()
+	sessionState = STATE_RUNNING
+	statusText:SetText("Running")
+	UpdateElapsedDisplay()
+	UpdateButtonState()
+	StartTicker()
+end
+
+---
+-- Pause/Resume button handler
+-- Toggles between RUNNING and PAUSED states
+---
+local function OnPauseResume()
+	if sessionState == STATE_RUNNING then
+		-- Pause: accumulate current segment, stop ticker
+		accumulatedElapsed = accumulatedElapsed + (GetTime() - segmentStartTime)
+		segmentStartTime = nil
+		StopTicker()
+		sessionState = STATE_PAUSED
+		statusText:SetText("Paused")
+	elseif sessionState == STATE_PAUSED then
+		-- Resume: start new segment, restart ticker
+		segmentStartTime = GetTime()
+		sessionState = STATE_RUNNING
+		statusText:SetText("Running")
+		StartTicker()
+	end
+	UpdateElapsedDisplay()
+	UpdateButtonState()
+end
+
+---
+-- Stop Session button handler
+-- Finalizes the session and returns to idle
+---
+local function OnStopSession()
+	-- If currently running, accumulate the final segment
+	if sessionState == STATE_RUNNING then
+		accumulatedElapsed = accumulatedElapsed + (GetTime() - segmentStartTime)
+	end
+	-- If paused, accumulated is already final
+	
+	StopTicker()
+	segmentStartTime = nil
+	sessionState = STATE_STOPPED
+	statusText:SetText("Stopped")
+	UpdateElapsedDisplay()
+	UpdateButtonState()
 end
 
 ---
 -- Create the session UI frame
 -- Frame is 300x180, movable, clamped to screen
--- https://wowpedia.fandom.com/wiki/API_CreateFrame
 ---
 local function CreateSessionFrame()
-	-- BackdropTemplate provides standard Retail frame styling
 	sessionFrame = CreateFrame("Frame", "GoldRouteSessionFrame", UIParent, "BackdropTemplate")
 
 	-- Set frame size and position
@@ -71,7 +170,6 @@ local function CreateSessionFrame()
 	sessionFrame:SetPoint("CENTER", UIParent, "CENTER")
 
 	-- Make frame movable by left-click drag
-	-- https://wowpedia.fandom.com/wiki/API_Frame_SetMovable
 	sessionFrame:SetMovable(true)
 	sessionFrame:SetClampedToScreen(true)
 	sessionFrame:EnableMouse(true)
@@ -96,35 +194,40 @@ local function CreateSessionFrame()
 	titleText:SetPoint("TOP", sessionFrame, "TOP", 0, -10)
 	titleText:SetText("GoldRoute")
 
-	-- Status text: Idle, Running, or Stopped
-	-- https://wowpedia.fandom.com/wiki/API_Frame_CreateFontString
-	ns.statusText = sessionFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	ns.statusText:SetPoint("TOP", sessionFrame, "TOP", 0, -35)
-	ns.statusText:SetText("Idle")
+	-- Status text: Idle, Running, Paused, or Stopped
+	statusText = sessionFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	statusText:SetPoint("TOP", sessionFrame, "TOP", 0, -35)
+	statusText:SetText("Idle")
 
 	-- Elapsed time display
-	ns.elapsedTimeText = sessionFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	ns.elapsedTimeText:SetPoint("TOP", sessionFrame, "TOP", 0, -60)
-	ns.elapsedTimeText:SetText("00:00:00")
+	elapsedTimeText = sessionFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	elapsedTimeText:SetPoint("TOP", sessionFrame, "TOP", 0, -60)
+	elapsedTimeText:SetText("00:00:00")
 
-	-- Start Session button
-	-- GameMenuButtonTemplate provides standard WoW button styling
-	ns.startButton = CreateFrame("Button", nil, sessionFrame, "GameMenuButtonTemplate")
-	ns.startButton:SetSize(120, 25)
-	ns.startButton:SetPoint("BOTTOMLEFT", sessionFrame, "BOTTOMLEFT", 10, 10)
-	ns.startButton:SetText("Start Session")
-	ns.startButton:SetScript("OnClick", StartSession)
+	-- Start Session button (left)
+	startButton = CreateFrame("Button", nil, sessionFrame, "GameMenuButtonTemplate")
+	startButton:SetSize(90, 25)
+	startButton:SetPoint("BOTTOMLEFT", sessionFrame, "BOTTOMLEFT", 8, 10)
+	startButton:SetText("Start")
+	startButton:SetScript("OnClick", OnStartSession)
 
-	-- Stop Session button (disabled until session starts)
-	ns.stopButton = CreateFrame("Button", nil, sessionFrame, "GameMenuButtonTemplate")
-	ns.stopButton:SetSize(120, 25)
-	ns.stopButton:SetPoint("BOTTOMRIGHT", sessionFrame, "BOTTOMRIGHT", -10, 10)
-	ns.stopButton:SetText("Stop Session")
-	ns.stopButton:SetScript("OnClick", StopSession)
-	ns.stopButton:Disable()
+	-- Pause/Resume button (center)
+	pauseButton = CreateFrame("Button", nil, sessionFrame, "GameMenuButtonTemplate")
+	pauseButton:SetSize(100, 25)
+	pauseButton:SetPoint("BOTTOM", sessionFrame, "BOTTOM", 0, 10)
+	pauseButton:SetText("Pause Session")
+	pauseButton:SetScript("OnClick", OnPauseResume)
+	pauseButton:Disable()
+
+	-- Stop Session button (right)
+	stopButton = CreateFrame("Button", nil, sessionFrame, "GameMenuButtonTemplate")
+	stopButton:SetSize(90, 25)
+	stopButton:SetPoint("BOTTOMRIGHT", sessionFrame, "BOTTOMRIGHT", -8, 10)
+	stopButton:SetText("Stop")
+	stopButton:SetScript("OnClick", OnStopSession)
+	stopButton:Disable()
 
 	-- Start hidden when player logs in
-	-- https://wowpedia.fandom.com/wiki/API_Frame_Hide
 	sessionFrame:Hide()
 end
 
@@ -136,8 +239,6 @@ function ns.ToggleSessionFrame()
 	if not sessionFrame then
 		CreateSessionFrame()
 	end
-	-- SetShown() shows/hides based on boolean argument
-	-- https://wowpedia.fandom.com/wiki/API_Frame_SetShown
 	sessionFrame:SetShown(not sessionFrame:IsShown())
 end
 
