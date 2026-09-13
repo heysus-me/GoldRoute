@@ -109,10 +109,20 @@ local function ClearAcquiredItems()
 end
 
 ---
--- Display acquired items from session
--- Shows top 8 items sorted by quantity descending
+-- Refresh live acquired items display during active session
+-- Called by Inventory.lua when items are acquired during RUNNING or PAUSED state
 ---
-local function DisplayAcquiredItems(session)
+function ns.RefreshLiveItems()
+	if sessionState == STATE_RUNNING or sessionState == STATE_PAUSED then
+		DisplayAcquiredItems(ns.GetAcquiredItems())
+	end
+end
+
+---
+-- Display acquired items from a table of {itemID = quantity, ...}
+-- Shows up to 8 item types sorted by quantity descending
+---
+local function DisplayAcquiredItems(itemsTable)
 	-- Clear all item display strings
 	if itemDisplayStrings then
 		for i, fontString in ipairs(itemDisplayStrings) do
@@ -120,14 +130,14 @@ local function DisplayAcquiredItems(session)
 		end
 	end
 	
-	if not session or not session.items then
+	if not itemsTable or type(itemsTable) ~= "table" then
 		itemsHeaderText:SetText("")
 		return
 	end
 	
 	-- Collect items into a table for sorting
 	local items = {}
-	for itemID, quantity in pairs(session.items) do
+	for itemID, quantity in pairs(itemsTable) do
 		table.insert(items, { itemID = itemID, quantity = quantity })
 	end
 	
@@ -142,8 +152,8 @@ local function DisplayAcquiredItems(session)
 			return a.quantity > b.quantity
 		end
 		
-		local nameA = ns.GetItemName(a.itemID) or "Item " .. a.itemID
-		local nameB = ns.GetItemName(b.itemID) or "Item " .. b.itemID
+		local nameA = ns.GetItemName(a.itemID) or ("Item " .. a.itemID)
+		local nameB = ns.GetItemName(b.itemID) or ("Item " .. b.itemID)
 		
 		if nameA ~= nameB then
 			return nameA < nameB
@@ -158,8 +168,8 @@ local function DisplayAcquiredItems(session)
 	local displayCount = math.min(#items, 8)
 	for i = 1, displayCount do
 		local item = items[i]
-		local itemName = ns.GetItemName(item.itemID) or "Item " .. item.itemID
-		local displayText = string.format("%-25s %d", itemName, item.quantity)
+		local itemName = ns.GetItemName(item.itemID) or ("Item " .. item.itemID)
+		local displayText = itemName .. " x" .. item.quantity
 		itemDisplayStrings[i]:SetText(displayText)
 	end
 	
@@ -272,6 +282,9 @@ local function OnStartSession()
 		ns.SessionStart()
 	end
 	
+	-- Display empty items list initially (will update as items are acquired)
+	DisplayAcquiredItems(ns.GetAcquiredItems())
+	
 	StartTicker()
 end
 
@@ -320,18 +333,22 @@ local function OnStopSession()
 	if ns.SessionStop then
 		local completedSession = ns.SessionStop(accumulatedElapsed)
 		DisplaySessionSummary(completedSession)
+		-- Display the final acquired items from the completed session
+		if completedSession and completedSession.items then
+			DisplayAcquiredItems(completedSession.items)
+		end
 	end
 end
 
 ---
 -- Create the session UI frame
--- Frame is 300x440 to accommodate items display
+-- Frame is 360x440 to accommodate items display with proper margins
 ---
 local function CreateSessionFrame()
 	sessionFrame = CreateFrame("Frame", "GoldRouteSessionFrame", UIParent, "BackdropTemplate")
 
 	-- Set frame size and position
-	sessionFrame:SetSize(300, 440)
+	sessionFrame:SetSize(360, 440)
 	sessionFrame:SetPoint("CENTER", UIParent, "CENTER")
 
 	-- Make frame movable by left-click drag
@@ -381,7 +398,7 @@ local function CreateSessionFrame()
 
 	-- Items Acquired header
 	itemsHeaderText = sessionFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	itemsHeaderText:SetPoint("TOP", sessionFrame, "TOP", 0, -130)
+	itemsHeaderText:SetPoint("TOPLEFT", sessionFrame, "TOPLEFT", 20, -130)
 	itemsHeaderText:SetText("")
 
 	-- Item display strings (up to 8 items + 1 "more" line)
@@ -391,7 +408,8 @@ local function CreateSessionFrame()
 		itemText:SetFont("Fonts\\FRIZQT__.TTF", 10)
 		itemText:SetJustifyH("LEFT")
 		local yOffset = -150 - ((i - 1) * 16)
-		itemText:SetPoint("TOP", sessionFrame, "TOP", -130, yOffset)
+		itemText:SetPoint("TOPLEFT", sessionFrame, "TOPLEFT", 20, yOffset)
+		itemText:SetPoint("TOPRIGHT", sessionFrame, "TOPRIGHT", -20, yOffset)
 		itemText:SetText("")
 		table.insert(itemDisplayStrings, itemText)
 	end

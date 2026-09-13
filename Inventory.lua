@@ -54,12 +54,14 @@ local function ProcessAcquisitionDelta()
 	local currentSnapshot = SnapshotBags()
 	
 	-- Check all items in current snapshot
+	local hasPositiveDelta = false
 	for itemID, currentCount in pairs(currentSnapshot) do
 		local previousCount = previousSnapshot[itemID] or 0
 		
 		if currentCount > previousCount then
 			local gain = currentCount - previousCount
 			acquiredItems[itemID] = (acquiredItems[itemID] or 0) + gain
+			hasPositiveDelta = true
 		end
 	end
 	
@@ -68,6 +70,11 @@ local function ProcessAcquisitionDelta()
 	
 	-- Update snapshot for next comparison
 	previousSnapshot = currentSnapshot
+	
+	-- Notify UI of live item updates if any positive delta detected
+	if hasPositiveDelta and ns.RefreshLiveItems then
+		ns.RefreshLiveItems()
+	end
 end
 
 ---
@@ -137,21 +144,20 @@ end
 
 ---
 -- Get item name from itemID
--- Returns item name or a fallback string if info is not available
+-- C_Item.GetItemInfo returns multiple values; first return is the item name string
+-- May return nil if item info is not cached; caller should handle gracefully
 ---
 function ns.GetItemName(itemID)
 	if not itemID then
-		return "Unknown Item"
+		return nil
 	end
 	
-	-- C_Item.GetItemInfo returns cached item information
-	local itemInfo = C_Item.GetItemInfo(itemID)
-	if itemInfo then
-		return itemInfo.itemName or ("Item " .. itemID)
-	end
+	-- C_Item.GetItemInfo returns (itemName, itemLink, itemRarity, itemLevel, ...)
+	-- We only need the first return value
+	local itemName = C_Item.GetItemInfo(itemID)
 	
-	-- If item info is not cached, return fallback
-	return "Item " .. itemID
+	-- Return the name if available, otherwise nil (caller will use fallback)
+	return itemName
 end
 
 ---
@@ -177,7 +183,12 @@ function ns.InventoryDebugPrint()
 		table.sort(itemList, function(a, b) return a.id < b.id end)
 		
 		for _, item in ipairs(itemList) do
-			print("Item " .. item.id .. ": " .. item.qty)
+			local itemName = ns.GetItemName(item.id)
+			if itemName then
+				print(itemName .. " (" .. item.id .. "): " .. item.qty)
+			else
+				print("Item " .. item.id .. ": " .. item.qty)
+			end
 		end
 	end
 end
