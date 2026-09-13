@@ -14,6 +14,8 @@ local pauseButton
 local stopButton
 local statusText
 local elapsedTimeText
+local rawGoldText
+local goldPerHourText
 
 -- Session timer state
 local sessionState = STATE_IDLE
@@ -29,6 +31,42 @@ local function FormatTime(seconds)
 	local minutes = math.floor((seconds % 3600) / 60)
 	local secs = math.floor(seconds % 60)
 	return string.format("%02d:%02d:%02d", hours, minutes, secs)
+end
+
+---
+-- Format copper into readable WoW currency
+-- Examples: 12g 34s 56c, -5g 40s, 123c
+---
+local function FormatCopper(copper)
+	if not copper then
+		return "0g"
+	end
+	
+	local isNegative = copper < 0
+	copper = math.abs(copper)
+	
+	local gold = math.floor(copper / 10000)
+	local silver = math.floor((copper % 10000) / 100)
+	local copperRemain = copper % 100
+	
+	local parts = {}
+	if gold > 0 then
+		table.insert(parts, gold .. "g")
+	end
+	if silver > 0 then
+		table.insert(parts, silver .. "s")
+	end
+	if copperRemain > 0 or #parts == 0 then
+		table.insert(parts, copperRemain .. "c")
+	end
+	
+	local result = table.concat(parts, " ")
+	
+	if isNegative then
+		result = "-" .. result
+	end
+	
+	return result
 end
 
 ---
@@ -50,6 +88,35 @@ end
 ---
 local function UpdateElapsedDisplay()
 	elapsedTimeText:SetText(FormatTime(GetElapsedTime()))
+end
+
+---
+-- Display session summary after stop
+---
+local function DisplaySessionSummary(session)
+	if not session then
+		rawGoldText:SetText("Raw Gold: --")
+		goldPerHourText:SetText("Gold / Hour: --")
+		return
+	end
+	
+	local rawGoldStr = FormatCopper(session.rawGoldDelta)
+	rawGoldText:SetText("Raw Gold: " .. rawGoldStr)
+	
+	if session.activeDuration > 0 then
+		local goldPerHour = session.rawGoldDelta / session.activeDuration * 3600
+		goldPerHourText:SetText("Gold / Hour: " .. FormatCopper(goldPerHour))
+	else
+		goldPerHourText:SetText("Gold / Hour: --")
+	end
+end
+
+---
+-- Clear session summary display
+---
+local function ClearSessionSummary()
+	rawGoldText:SetText("")
+	goldPerHourText:SetText("")
 end
 
 ---
@@ -103,7 +170,7 @@ end
 
 ---
 -- Start Session button handler
--- Initializes a new session from scratch
+-- Initializes a new session through the session-data API
 ---
 local function OnStartSession()
 	StopTicker()
@@ -113,6 +180,13 @@ local function OnStartSession()
 	statusText:SetText("Running")
 	UpdateElapsedDisplay()
 	UpdateButtonState()
+	ClearSessionSummary()
+	
+	-- Start session in data module
+	if ns.SessionStart then
+		ns.SessionStart()
+	end
+	
 	StartTicker()
 end
 
@@ -141,7 +215,7 @@ end
 
 ---
 -- Stop Session button handler
--- Finalizes the session and returns to idle
+-- Finalizes the timer and persists session data
 ---
 local function OnStopSession()
 	-- If currently running, accumulate the final segment
@@ -156,17 +230,23 @@ local function OnStopSession()
 	statusText:SetText("Stopped")
 	UpdateElapsedDisplay()
 	UpdateButtonState()
+	
+	-- Stop session in data module and display summary
+	if ns.SessionStop then
+		local completedSession = ns.SessionStop(accumulatedElapsed)
+		DisplaySessionSummary(completedSession)
+	end
 end
 
 ---
 -- Create the session UI frame
--- Frame is 300x180, movable, clamped to screen
+-- Frame is 300x220 to accommodate summary lines
 ---
 local function CreateSessionFrame()
 	sessionFrame = CreateFrame("Frame", "GoldRouteSessionFrame", UIParent, "BackdropTemplate")
 
 	-- Set frame size and position
-	sessionFrame:SetSize(300, 180)
+	sessionFrame:SetSize(300, 220)
 	sessionFrame:SetPoint("CENTER", UIParent, "CENTER")
 
 	-- Make frame movable by left-click drag
@@ -203,6 +283,16 @@ local function CreateSessionFrame()
 	elapsedTimeText = sessionFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 	elapsedTimeText:SetPoint("TOP", sessionFrame, "TOP", 0, -60)
 	elapsedTimeText:SetText("00:00:00")
+
+	-- Raw Gold text
+	rawGoldText = sessionFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	rawGoldText:SetPoint("TOP", sessionFrame, "TOP", 0, -85)
+	rawGoldText:SetText("")
+
+	-- Gold / Hour text
+	goldPerHourText = sessionFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	goldPerHourText:SetPoint("TOP", sessionFrame, "TOP", 0, -105)
+	goldPerHourText:SetText("")
 
 	-- Start Session button (left)
 	startButton = CreateFrame("Button", nil, sessionFrame, "GameMenuButtonTemplate")
@@ -244,3 +334,4 @@ end
 
 -- Create frame when SessionFrame.lua loads
 CreateSessionFrame()
+
