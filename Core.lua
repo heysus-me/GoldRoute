@@ -27,7 +27,7 @@ local function InitializeDatabase()
 end
 
 ---
--- Slash command handler - prints addon info to chat
+-- Slash command handler - toggles session frame and prints addon info
 -- Called when user types /goldroute
 -- https://wowpedia.fandom.com/wiki/SlashCmdList
 ---
@@ -35,6 +35,10 @@ local function OnSlashCommand(msg)
 	-- print() writes to the default chat frame
 	-- https://wowpedia.fandom.com/wiki/API_print
 	print(addonName .. " v" .. ADDON_VERSION)
+	-- Toggle session frame from SessionFrame.lua
+	if ns.ToggleSessionFrame then
+		ns.ToggleSessionFrame()
+	end
 end
 
 ---

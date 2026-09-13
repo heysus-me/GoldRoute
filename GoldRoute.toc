@@ -6,3 +6,4 @@
 ## Notes: A World of Warcraft addon for gold farming route tracking and optimization.
 
 Core.lua
+SessionFrame.lua
