@@ -16,6 +16,8 @@ local statusText
 local elapsedTimeText
 local rawGoldText
 local goldPerHourText
+local itemsHeaderText
+local itemDisplayStrings
 
 -- Session timer state
 local sessionState = STATE_IDLE
@@ -35,6 +37,7 @@ end
 
 ---
 -- Format copper into readable WoW currency
+-- Rounds to nearest whole copper before decomposing
 -- Examples: 12g 34s 56c, -5g 40s, 123c
 ---
 local function FormatCopper(copper)
@@ -44,6 +47,9 @@ local function FormatCopper(copper)
 	
 	local isNegative = copper < 0
 	copper = math.abs(copper)
+	
+	-- Round to nearest whole copper
+	copper = math.floor(copper + 0.5)
 	
 	local gold = math.floor(copper / 10000)
 	local silver = math.floor((copper % 10000) / 100)
@@ -97,6 +103,7 @@ local function DisplaySessionSummary(session)
 	if not session then
 		rawGoldText:SetText("Raw Gold: --")
 		goldPerHourText:SetText("Gold / Hour: --")
+		ClearAcquiredItems()
 		return
 	end
 	
@@ -109,14 +116,83 @@ local function DisplaySessionSummary(session)
 	else
 		goldPerHourText:SetText("Gold / Hour: --")
 	end
+	
+	DisplayAcquiredItems(session)
 end
 
 ---
--- Clear session summary display
+-- Display acquired items from session
+-- Shows top 8 items sorted by quantity descending
 ---
-local function ClearSessionSummary()
-	rawGoldText:SetText("")
-	goldPerHourText:SetText("")
+local function DisplayAcquiredItems(session)
+	-- Clear all item display strings
+	if itemDisplayStrings then
+		for i, fontString in ipairs(itemDisplayStrings) do
+			fontString:SetText("")
+		end
+	end
+	
+	if not session or not session.items then
+		itemsHeaderText:SetText("")
+		return
+	end
+	
+	-- Collect items into a table for sorting
+	local items = {}
+	for itemID, quantity in pairs(session.items) do
+		table.insert(items, { itemID = itemID, quantity = quantity })
+	end
+	
+	if #items == 0 then
+		itemsHeaderText:SetText("")
+		return
+	end
+	
+	-- Sort by quantity descending, then by item name or ID
+	table.sort(items, function(a, b)
+		if a.quantity ~= b.quantity then
+			return a.quantity > b.quantity
+		end
+		
+		local nameA = ns.GetItemName(a.itemID) or "Item " .. a.itemID
+		local nameB = ns.GetItemName(b.itemID) or "Item " .. b.itemID
+		
+		if nameA ~= nameB then
+			return nameA < nameB
+		end
+		
+		return a.itemID < b.itemID
+	end)
+	
+	itemsHeaderText:SetText("Items Acquired")
+	
+	-- Display up to 8 items
+	local displayCount = math.min(#items, 8)
+	for i = 1, displayCount do
+		local item = items[i]
+		local itemName = ns.GetItemName(item.itemID) or "Item " .. item.itemID
+		local displayText = string.format("%-25s %d", itemName, item.quantity)
+		itemDisplayStrings[i]:SetText(displayText)
+	end
+	
+	-- Show "+X more item types" if there are more than 8
+	if #items > 8 then
+		itemDisplayStrings[9]:SetText("+ " .. (#items - 8) .. " more item types")
+	else
+		itemDisplayStrings[9]:SetText("")
+	end
+end
+
+---
+-- Clear acquired items display
+---
+local function ClearAcquiredItems()
+	itemsHeaderText:SetText("")
+	if itemDisplayStrings then
+		for i, fontString in ipairs(itemDisplayStrings) do
+			fontString:SetText("")
+		end
+	end
 end
 
 ---
@@ -240,13 +316,13 @@ end
 
 ---
 -- Create the session UI frame
--- Frame is 300x220 to accommodate summary lines
+-- Frame is 300x440 to accommodate items display
 ---
 local function CreateSessionFrame()
 	sessionFrame = CreateFrame("Frame", "GoldRouteSessionFrame", UIParent, "BackdropTemplate")
 
 	-- Set frame size and position
-	sessionFrame:SetSize(300, 220)
+	sessionFrame:SetSize(300, 440)
 	sessionFrame:SetPoint("CENTER", UIParent, "CENTER")
 
 	-- Make frame movable by left-click drag
@@ -293,6 +369,23 @@ local function CreateSessionFrame()
 	goldPerHourText = sessionFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 	goldPerHourText:SetPoint("TOP", sessionFrame, "TOP", 0, -105)
 	goldPerHourText:SetText("")
+
+	-- Items Acquired header
+	itemsHeaderText = sessionFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	itemsHeaderText:SetPoint("TOP", sessionFrame, "TOP", 0, -130)
+	itemsHeaderText:SetText("")
+
+	-- Item display strings (up to 8 items + 1 "more" line)
+	itemDisplayStrings = {}
+	for i = 1, 9 do
+		local itemText = sessionFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+		itemText:SetFont("Fonts\\FRIZQT__.TTF", 10)
+		itemText:SetJustifyH("LEFT")
+		local yOffset = -150 - ((i - 1) * 16)
+		itemText:SetPoint("TOP", sessionFrame, "TOP", -130, yOffset)
+		itemText:SetText("")
+		table.insert(itemDisplayStrings, itemText)
+	end
 
 	-- Start Session button (left)
 	startButton = CreateFrame("Button", nil, sessionFrame, "GameMenuButtonTemplate")

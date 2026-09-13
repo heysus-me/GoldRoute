@@ -7,4 +7,5 @@
 
 Core.lua
 Session.lua
+Inventory.lua
 SessionFrame.lua

@@ -3,6 +3,7 @@ local addonName, ns = ...
 
 local activeSession = nil
 local lastSession = nil
+local sessionCounter = 0
 
 ---
 -- Create a new session object with default values
@@ -18,23 +19,26 @@ local function CreateSessionObject()
 		startingMoney = 0,
 		endingMoney = 0,
 		rawGoldDelta = 0,
+		items = {},
 	}
 end
 
 ---
--- Generate a reasonably unique session ID
--- Format: realm-character-timestamp
+-- Generate a reliably unique session ID
+-- Format: realm-character-timestamp-sequence
+-- Sequence ensures no collisions during rapid consecutive sessions
 ---
 local function GenerateSessionID()
 	local character = UnitName("player") or "Unknown"
 	local realm = GetRealmName() or "Unknown"
 	local timestamp = time()
-	return realm .. "-" .. character .. "-" .. timestamp
+	sessionCounter = sessionCounter + 1
+	return realm .. "-" .. character .. "-" .. timestamp .. "-" .. sessionCounter
 end
 
 ---
 -- Start a new farming session
--- Records character metadata, wall-clock timestamp, and starting money
+-- Records character metadata, wall-clock timestamp, starting money, and begins inventory tracking
 ---
 function ns.SessionStart()
 	if activeSession then
@@ -49,12 +53,17 @@ function ns.SessionStart()
 	activeSession.startedAt = time()
 	activeSession.startingMoney = GetMoney() or 0
 	
+	-- Begin inventory tracking
+	if ns.InventoryStartTracking then
+		ns.InventoryStartTracking()
+	end
+	
 	return activeSession
 end
 
 ---
 -- Stop the active farming session
--- Records ending money, calculates raw gold delta, and stores session
+-- Records ending money, calculates raw gold delta, finalizes inventory tracking, and stores session
 ---
 function ns.SessionStop(activeDuration)
 	if not activeSession then
@@ -66,6 +75,14 @@ function ns.SessionStop(activeDuration)
 	activeSession.endingMoney = GetMoney() or 0
 	activeSession.rawGoldDelta = activeSession.endingMoney - activeSession.startingMoney
 	activeSession.activeDuration = activeDuration or 0
+	
+	-- Finalize inventory tracking and attach to session
+	if ns.InventoryStopTracking then
+		local acquiredItems = ns.InventoryStopTracking()
+		if acquiredItems then
+			activeSession.items = acquiredItems
+		end
+	end
 	
 	-- Move to last session and clear active reference
 	lastSession = activeSession
