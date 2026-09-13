@@ -14,10 +14,13 @@ local pauseButton
 local stopButton
 local statusText
 local elapsedTimeText
-local rawGoldText
-local goldPerHourText
+local rawGoldMetricsText
+local rawGoldPerHourText
+local itemValueText
+local estimatedGoldPerHourText
 local itemsHeaderText
 local itemDisplayStrings
+local metricEventFrame
 
 -- Session timer state
 local sessionState = STATE_IDLE
@@ -44,17 +47,17 @@ local function FormatCopper(copper)
 	if not copper then
 		return "0g"
 	end
-	
+
 	local isNegative = copper < 0
 	copper = math.abs(copper)
-	
+
 	-- Round to nearest whole copper
 	copper = math.floor(copper + 0.5)
-	
+
 	local gold = math.floor(copper / 10000)
 	local silver = math.floor((copper % 10000) / 100)
 	local copperRemain = copper % 100
-	
+
 	local parts = {}
 	if gold > 0 then
 		table.insert(parts, gold .. "g")
@@ -65,13 +68,13 @@ local function FormatCopper(copper)
 	if copperRemain > 0 or #parts == 0 then
 		table.insert(parts, copperRemain .. "c")
 	end
-	
+
 	local result = table.concat(parts, " ")
-	
+
 	if isNegative then
 		result = "-" .. result
 	end
-	
+
 	return result
 end
 
@@ -97,6 +100,82 @@ local function UpdateElapsedDisplay()
 end
 
 ---
+-- Update all live session metrics
+-- Called every second by ticker and immediately on state changes
+-- Calculates and displays: Raw Gold, Raw Gold/Hour, Item Value, Estimated Gold/Hour
+---
+local function UpdateLiveMetrics()
+	-- Get current elapsed time (already handles RUNNING vs PAUSED correctly)
+	local elapsedTime = GetElapsedTime()
+
+	-- Get live raw gold delta
+	local liveRawGold = nil
+	if ns.GetLiveRawGoldDelta then
+		liveRawGold = ns.GetLiveRawGoldDelta()
+	end
+
+	-- Get acquired items
+	local items = ns.GetAcquiredItems and ns.GetAcquiredItems() or {}
+
+	-- Get estimated item value
+	local itemValue = 0
+	local pricedCount = 0
+	local unpricedCount = 0
+	if ns.GetEstimatedItemValue then
+		itemValue, pricedCount, unpricedCount = ns.GetEstimatedItemValue(items)
+	end
+
+	-- Auctionator availability
+	local hasAuctionator = ns.IsAuctionatorAvailable and ns.IsAuctionatorAvailable() or false
+
+	-- Update Raw Gold
+	if liveRawGold then
+		rawGoldMetricsText:SetText("Raw Gold: " .. FormatCopper(liveRawGold))
+	else
+		rawGoldMetricsText:SetText("Raw Gold: 0c")
+	end
+
+	-- Calculate Raw Gold / Hour (avoid division by zero)
+	if liveRawGold and elapsedTime > 0 then
+		local rawGoldPerHour = liveRawGold / elapsedTime * 3600
+		rawGoldPerHourText:SetText("Raw Gold / Hour: " .. FormatCopper(rawGoldPerHour))
+	else
+		rawGoldPerHourText:SetText("Raw Gold / Hour: --")
+	end
+
+	-- Update Item Value (show -- if Auctionator unavailable)
+	if hasAuctionator then
+		local displayValue = itemValue
+		local valueStr = FormatCopper(displayValue)
+
+		-- Add unpriced indicator if needed
+		if unpricedCount > 0 then
+			valueStr = valueStr .. " (" .. unpricedCount .. " unpriced)"
+		end
+
+		itemValueText:SetText("Item Value: " .. valueStr)
+	else
+		itemValueText:SetText("Item Value: --")
+	end
+
+	-- Update Estimated Gold / Hour
+	if hasAuctionator and elapsedTime > 0 then
+		local liveRawGoldVal = liveRawGold or 0
+		local estimatedTotalValue = liveRawGoldVal + itemValue
+		local estimatedGoldPerHour = estimatedTotalValue / elapsedTime * 3600
+		estimatedGoldPerHourText:SetText("Estimated Gold / Hour: " .. FormatCopper(estimatedGoldPerHour))
+	else
+		estimatedGoldPerHourText:SetText("Estimated Gold / Hour: --")
+	end
+end
+
+local function OnMetricEvent(_, event)
+	if event == "PLAYER_MONEY" and (sessionState == STATE_RUNNING or sessionState == STATE_PAUSED) then
+		UpdateLiveMetrics()
+	end
+end
+
+---
 -- Clear acquired items display
 ---
 local function ClearAcquiredItems()
@@ -111,6 +190,7 @@ end
 ---
 -- Display acquired items from a table of {itemID = quantity, ...}
 -- Shows up to 8 item types sorted by quantity descending
+-- Includes per-item value from Auctionator if available
 ---
 local function DisplayAcquiredItems(itemsTable)
 	-- Clear all item display strings
@@ -119,12 +199,12 @@ local function DisplayAcquiredItems(itemsTable)
 			fontString:SetText("")
 		end
 	end
-	
+
 	if not itemsTable or type(itemsTable) ~= "table" then
 		itemsHeaderText:SetText("")
 		return
 	end
-	
+
 	-- Collect items into a table for sorting
 	-- Only include valid items: numeric itemID, numeric quantity > 0
 	local items = {}
@@ -133,39 +213,51 @@ local function DisplayAcquiredItems(itemsTable)
 			table.insert(items, { itemID = itemID, quantity = quantity })
 		end
 	end
-	
+
 	if #items == 0 then
 		itemsHeaderText:SetText("")
 		return
 	end
-	
+
 	-- Sort by quantity descending, then by item name or ID
 	table.sort(items, function(a, b)
 		if a.quantity ~= b.quantity then
 			return a.quantity > b.quantity
 		end
-		
+
 		local nameA = ns.GetItemName(a.itemID) or ("Item " .. a.itemID)
 		local nameB = ns.GetItemName(b.itemID) or ("Item " .. b.itemID)
-		
+
 		if nameA ~= nameB then
 			return nameA < nameB
 		end
-		
+
 		return a.itemID < b.itemID
 	end)
-	
+
 	itemsHeaderText:SetText("Items Acquired")
-	
-	-- Display up to 8 items
+
+	-- Display up to 8 items with pricing
 	local displayCount = math.min(#items, 8)
 	for i = 1, displayCount do
 		local item = items[i]
 		local itemName = ns.GetItemName(item.itemID) or ("Item " .. item.itemID)
-		local displayText = itemName .. " x" .. item.quantity
+
+		-- Get per-item value
+		local unitPrice = ns.GetItemMarketPrice and ns.GetItemMarketPrice(item.itemID) or nil
+		local itemValue = unitPrice and (unitPrice * item.quantity) or nil
+
+		-- Format display: "Item Name xQuantity   Value"
+		local displayText
+		if itemValue then
+			displayText = itemName .. " x" .. item.quantity .. "   " .. FormatCopper(itemValue)
+		else
+			displayText = itemName .. " x" .. item.quantity .. "   --"
+		end
+
 		itemDisplayStrings[i]:SetText(displayText)
 	end
-	
+
 	-- Show "+X more item types" if there are more than 8
 	if #items > 8 then
 		itemDisplayStrings[9]:SetText("+ " .. (#items - 8) .. " more item types")
@@ -182,6 +274,7 @@ function ns.RefreshLiveItems()
 	if sessionState == STATE_RUNNING or sessionState == STATE_PAUSED then
 		local items = ns.GetAcquiredItems and ns.GetAcquiredItems() or {}
 		DisplayAcquiredItems(items)
+		UpdateLiveMetrics()
 	end
 end
 
@@ -189,8 +282,10 @@ end
 -- Clear all session summary display elements
 ---
 local function ClearSessionSummary()
-	rawGoldText:SetText("")
-	goldPerHourText:SetText("")
+	rawGoldMetricsText:SetText("")
+	rawGoldPerHourText:SetText("")
+	itemValueText:SetText("")
+	estimatedGoldPerHourText:SetText("")
 	ClearAcquiredItems()
 end
 
@@ -199,22 +294,57 @@ end
 ---
 local function DisplaySessionSummary(session)
 	if not session then
-		rawGoldText:SetText("Raw Gold: --")
-		goldPerHourText:SetText("Gold / Hour: --")
+		rawGoldMetricsText:SetText("Raw Gold: --")
+		rawGoldPerHourText:SetText("Raw Gold / Hour: --")
+		itemValueText:SetText("Item Value: --")
+		estimatedGoldPerHourText:SetText("Estimated Gold / Hour: --")
 		ClearAcquiredItems()
 		return
 	end
-	
+
+	-- Display finalized raw gold
 	local rawGoldStr = FormatCopper(session.rawGoldDelta)
-	rawGoldText:SetText("Raw Gold: " .. rawGoldStr)
-	
+	rawGoldMetricsText:SetText("Raw Gold: " .. rawGoldStr)
+
+	-- Display finalized raw gold per hour
 	if session.activeDuration > 0 then
 		local goldPerHour = session.rawGoldDelta / session.activeDuration * 3600
-		goldPerHourText:SetText("Gold / Hour: " .. FormatCopper(goldPerHour))
+		rawGoldPerHourText:SetText("Raw Gold / Hour: " .. FormatCopper(goldPerHour))
 	else
-		goldPerHourText:SetText("Gold / Hour: --")
+		rawGoldPerHourText:SetText("Raw Gold / Hour: --")
 	end
-	
+
+	-- Calculate finalized item value
+	local itemValue = 0
+	local pricedCount = 0
+	local unpricedCount = 0
+	if ns.GetEstimatedItemValue then
+		itemValue, pricedCount, unpricedCount = ns.GetEstimatedItemValue(session.items or {})
+	end
+
+	-- Check Auctionator availability
+	local hasAuctionator = ns.IsAuctionatorAvailable and ns.IsAuctionatorAvailable() or false
+
+	-- Display item value
+	if hasAuctionator then
+		local valueStr = FormatCopper(itemValue)
+		if unpricedCount > 0 then
+			valueStr = valueStr .. " (" .. unpricedCount .. " unpriced)"
+		end
+		itemValueText:SetText("Item Value: " .. valueStr)
+	else
+		itemValueText:SetText("Item Value: --")
+	end
+
+	-- Display estimated gold per hour
+	if hasAuctionator and session.activeDuration > 0 then
+		local estimatedTotalValue = session.rawGoldDelta + itemValue
+		local estimatedGoldPerHour = estimatedTotalValue / session.activeDuration * 3600
+		estimatedGoldPerHourText:SetText("Estimated Gold / Hour: " .. FormatCopper(estimatedGoldPerHour))
+	else
+		estimatedGoldPerHourText:SetText("Estimated Gold / Hour: --")
+	end
+
 	-- Display the acquired items from the session
 	DisplayAcquiredItems(session.items or {})
 end
@@ -265,6 +395,7 @@ local function StartTicker()
 	StopTicker()
 	activeTicker = C_Timer.NewTicker(1, function()
 		UpdateElapsedDisplay()
+		UpdateLiveMetrics()
 	end)
 end
 
@@ -278,18 +409,20 @@ local function OnStartSession()
 	segmentStartTime = GetTime()
 	sessionState = STATE_RUNNING
 	statusText:SetText("Running")
-	UpdateElapsedDisplay()
-	UpdateButtonState()
 	ClearSessionSummary()
-	
+
 	-- Start session in data module
 	if ns.SessionStart then
 		ns.SessionStart()
 	end
-	
+
+	UpdateElapsedDisplay()
+	UpdateLiveMetrics()
+	UpdateButtonState()
+
 	-- Display empty items list initially (will update as items are acquired)
 	DisplayAcquiredItems(ns.GetAcquiredItems())
-	
+
 	StartTicker()
 end
 
@@ -313,6 +446,7 @@ local function OnPauseResume()
 		StartTicker()
 	end
 	UpdateElapsedDisplay()
+	UpdateLiveMetrics()
 	UpdateButtonState()
 end
 
@@ -326,14 +460,14 @@ local function OnStopSession()
 		accumulatedElapsed = accumulatedElapsed + (GetTime() - segmentStartTime)
 	end
 	-- If paused, accumulated is already final
-	
+
 	StopTicker()
 	segmentStartTime = nil
 	sessionState = STATE_STOPPED
 	statusText:SetText("Stopped")
 	UpdateElapsedDisplay()
 	UpdateButtonState()
-	
+
 	-- Stop session in data module and display summary
 	if ns.SessionStop then
 		local completedSession = ns.SessionStop(accumulatedElapsed)
@@ -343,13 +477,13 @@ end
 
 ---
 -- Create the session UI frame
--- Frame is 360x440 to accommodate items display with proper margins
+-- Frame needs to be tall enough for 4 metrics + items display
 ---
 local function CreateSessionFrame()
 	sessionFrame = CreateFrame("Frame", "GoldRouteSessionFrame", UIParent, "BackdropTemplate")
 
 	-- Set frame size and position
-	sessionFrame:SetSize(360, 440)
+	sessionFrame:SetSize(360, 500)
 	sessionFrame:SetPoint("CENTER", UIParent, "CENTER")
 
 	-- Make frame movable by left-click drag
@@ -372,6 +506,10 @@ local function CreateSessionFrame()
 	sessionFrame:SetBackdropColor(0, 0, 0, 0.8)
 	sessionFrame:SetBackdropBorderColor(1, 1, 1, 1)
 
+	metricEventFrame = CreateFrame("Frame")
+	metricEventFrame:RegisterEvent("PLAYER_MONEY")
+	metricEventFrame:SetScript("OnEvent", OnMetricEvent)
+
 	-- Title text
 	local titleText = sessionFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 	titleText:SetPoint("TOP", sessionFrame, "TOP", 0, -10)
@@ -387,19 +525,29 @@ local function CreateSessionFrame()
 	elapsedTimeText:SetPoint("TOP", sessionFrame, "TOP", 0, -60)
 	elapsedTimeText:SetText("00:00:00")
 
-	-- Raw Gold text
-	rawGoldText = sessionFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	rawGoldText:SetPoint("TOP", sessionFrame, "TOP", 0, -85)
-	rawGoldText:SetText("")
+	-- Raw Gold metrics text
+	rawGoldMetricsText = sessionFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	rawGoldMetricsText:SetPoint("TOP", sessionFrame, "TOP", 0, -85)
+	rawGoldMetricsText:SetText("")
 
-	-- Gold / Hour text
-	goldPerHourText = sessionFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	goldPerHourText:SetPoint("TOP", sessionFrame, "TOP", 0, -105)
-	goldPerHourText:SetText("")
+	-- Raw Gold / Hour text
+	rawGoldPerHourText = sessionFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	rawGoldPerHourText:SetPoint("TOP", sessionFrame, "TOP", 0, -105)
+	rawGoldPerHourText:SetText("")
+
+	-- Item Value text
+	itemValueText = sessionFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	itemValueText:SetPoint("TOP", sessionFrame, "TOP", 0, -125)
+	itemValueText:SetText("")
+
+	-- Estimated Gold / Hour text
+	estimatedGoldPerHourText = sessionFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	estimatedGoldPerHourText:SetPoint("TOP", sessionFrame, "TOP", 0, -145)
+	estimatedGoldPerHourText:SetText("")
 
 	-- Items Acquired header
 	itemsHeaderText = sessionFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	itemsHeaderText:SetPoint("TOPLEFT", sessionFrame, "TOPLEFT", 20, -130)
+	itemsHeaderText:SetPoint("TOPLEFT", sessionFrame, "TOPLEFT", 20, -170)
 	itemsHeaderText:SetText("")
 
 	-- Item display strings (up to 8 items + 1 "more" line)
@@ -408,7 +556,7 @@ local function CreateSessionFrame()
 		local itemText = sessionFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 		itemText:SetFont("Fonts\\FRIZQT__.TTF", 10)
 		itemText:SetJustifyH("LEFT")
-		local yOffset = -150 - ((i - 1) * 16)
+		local yOffset = -190 - ((i - 1) * 16)
 		itemText:SetPoint("TOPLEFT", sessionFrame, "TOPLEFT", 20, yOffset)
 		itemText:SetPoint("TOPRIGHT", sessionFrame, "TOPRIGHT", -20, yOffset)
 		itemText:SetText("")
@@ -455,4 +603,3 @@ end
 
 -- Create frame when SessionFrame.lua loads
 CreateSessionFrame()
-

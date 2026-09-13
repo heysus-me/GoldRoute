@@ -167,30 +167,46 @@ end
 function ns.InventoryDebugPrint()
 	print("GoldRoute inventory tracking: " .. tostring(isTracking))
 	
-	local count = 0
-	for _ in pairs(acquiredItems) do
-		count = count + 1
+	local itemList = {}
+	for itemID, quantity in pairs(acquiredItems) do
+		table.insert(itemList, {id = itemID, qty = quantity})
 	end
-	
-	print("Acquired item types: " .. count)
-	
-	if count > 0 then
-		-- Sort items by ID for consistent output
-		local itemList = {}
-		for itemID, quantity in pairs(acquiredItems) do
-			table.insert(itemList, {id = itemID, qty = quantity})
-		end
-		table.sort(itemList, function(a, b) return a.id < b.id end)
+	table.sort(itemList, function(a, b) return a.id < b.id end)
+	print("Acquired item types: " .. #itemList)
+
+	local totalItemValue = 0
+	for _, item in ipairs(itemList) do
+		local itemName = ns.GetItemName(item.id)
+		local unitPrice = ns.GetItemMarketPrice and ns.GetItemMarketPrice(item.id) or nil
+		local priceDisplay = "(no price)"
 		
-		for _, item in ipairs(itemList) do
-			local itemName = ns.GetItemName(item.id)
-			if itemName then
-				print(itemName .. " (" .. item.id .. "): " .. item.qty)
-			else
-				print("Item " .. item.id .. ": " .. item.qty)
-			end
+		if unitPrice then
+			local gold = math.floor(unitPrice / 10000)
+			local silver = math.floor((unitPrice % 10000) / 100)
+			local copperRemain = unitPrice % 100
+			local parts = {}
+			if gold > 0 then table.insert(parts, gold .. "g") end
+			if silver > 0 then table.insert(parts, silver .. "s") end
+			if copperRemain > 0 or #parts == 0 then table.insert(parts, copperRemain .. "c") end
+			priceDisplay = table.concat(parts, " ")
+			totalItemValue = totalItemValue + (unitPrice * item.qty)
 		end
+
+		local itemLabel = itemName or ("Item " .. item.id)
+		print(itemLabel .. " (" .. item.id .. "): " .. item.qty .. " @ " .. priceDisplay .. " each")
 	end
+
+	local hasAuctionator = ns.IsAuctionatorAvailable and ns.IsAuctionatorAvailable() or false
+	print("Auctionator available: " .. tostring(hasAuctionator))
+
+	local gold = math.floor(totalItemValue / 10000)
+	local silver = math.floor((totalItemValue % 10000) / 100)
+	local copperRemain = totalItemValue % 100
+	local parts = {}
+	if gold > 0 then table.insert(parts, gold .. "g") end
+	if silver > 0 then table.insert(parts, silver .. "s") end
+	if copperRemain > 0 or #parts == 0 then table.insert(parts, copperRemain .. "c") end
+	print("Estimated item value: " .. table.concat(parts, " "))
 end
 
 -- Set up event handler for the module-local event frame

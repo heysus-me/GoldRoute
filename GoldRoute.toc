@@ -8,4 +8,5 @@
 Core.lua
 Session.lua
 Inventory.lua
+Pricing.lua
 SessionFrame.lua

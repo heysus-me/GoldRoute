@@ -99,6 +99,20 @@ function ns.GetActiveSession()
 end
 
 ---
+-- Get the live raw gold delta for the active session
+-- If a session is active: currentMoney - startingMoney
+-- If no session is active: nil
+-- Does not mutate the session object
+---
+function ns.GetLiveRawGoldDelta()
+	if not activeSession then
+		return nil
+	end
+
+	return (GetMoney() or 0) - activeSession.startingMoney
+end
+
+---
 -- Get the most recently completed session
 ---
 function ns.GetLastSession()
