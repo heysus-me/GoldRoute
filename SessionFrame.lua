@@ -97,6 +97,15 @@ local function UpdateElapsedDisplay()
 end
 
 ---
+-- Clear all session summary display elements
+---
+local function ClearSessionSummary()
+	rawGoldText:SetText("")
+	goldPerHourText:SetText("")
+	ClearAcquiredItems()
+end
+
+---
 -- Display session summary after stop
 ---
 local function DisplaySessionSummary(session)

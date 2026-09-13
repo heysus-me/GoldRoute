@@ -6,6 +6,9 @@ local baselineSnapshot = {}
 local previousSnapshot = {}
 local acquiredItems = {}
 
+-- Module-local event frame for bag updates
+local eventFrame = CreateFrame("Frame")
+
 ---
 -- Capture the current state of all bags
 -- Returns a table: { [itemID] = quantity, ... }
@@ -86,13 +89,8 @@ function ns.InventoryStartTracking()
 		previousSnapshot[itemID] = quantity
 	end
 	
-	-- Register for bag update events
-	local eventFrame = CreateFrame("Frame")
+	-- Register for bag update events (reuse module-local frame)
 	eventFrame:RegisterEvent("BAG_UPDATE_DELAYED")
-	eventFrame:SetScript("OnEvent", OnBagUpdate)
-	
-	-- Store frame reference so we can unregister later
-	_G.GoldRouteInventoryEventFrame = eventFrame
 end
 
 ---
@@ -108,10 +106,7 @@ function ns.InventoryStopTracking()
 	isTracking = false
 	
 	-- Unregister events
-	if _G.GoldRouteInventoryEventFrame then
-		_G.GoldRouteInventoryEventFrame:UnregisterEvent("BAG_UPDATE_DELAYED")
-		_G.GoldRouteInventoryEventFrame = nil
-	end
+	eventFrame:UnregisterEvent("BAG_UPDATE_DELAYED")
 	
 	-- Return a copy of acquired items
 	local result = {}
@@ -151,3 +146,6 @@ function ns.GetItemName(itemID)
 	-- If item info is not cached, return fallback
 	return "Item " .. itemID
 end
+
+-- Set up event handler for the module-local event frame
+eventFrame:SetScript("OnEvent", OnBagUpdate)
