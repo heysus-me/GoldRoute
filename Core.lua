@@ -21,9 +21,10 @@ local function InitializeDatabase()
 	-- Initialize db structure on first load
 	if not GoldRouteDB.initialized then
 		GoldRouteDB.initialized = true
-		-- Placeholder for future route data
-		GoldRouteDB.routes = {}
 	end
+
+	GoldRouteDB.routes = GoldRouteDB.routes or {}
+	GoldRouteDB.sessions = GoldRouteDB.sessions or {}
 end
 
 ---
@@ -39,6 +40,9 @@ local function OnSlashCommand(msg)
 	if msg == "debug" then
 		if ns.InventoryDebugPrint then
 			ns.InventoryDebugPrint()
+		end
+		if ns.GetSessionHistory then
+			print("Saved sessions: " .. #ns.GetSessionHistory())
 		end
 		return
 	end

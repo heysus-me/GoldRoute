@@ -83,6 +83,23 @@ function ns.SessionStop(activeDuration)
 			activeSession.items = acquiredItems
 		end
 	end
+
+	-- Capture the pricing snapshot and derived rates at completion.
+	local itemValue, pricedItemTypes, unpricedItemTypes = 0, 0, 0
+	if ns.GetEstimatedItemValue then
+		itemValue, pricedItemTypes, unpricedItemTypes = ns.GetEstimatedItemValue(activeSession.items)
+	end
+	activeSession.itemValue = math.floor(itemValue + 0.5)
+	activeSession.estimatedTotalValue = activeSession.rawGoldDelta + activeSession.itemValue
+	activeSession.pricedItemTypes = pricedItemTypes
+	activeSession.unpricedItemTypes = unpricedItemTypes
+	if activeSession.activeDuration > 0 then
+		activeSession.rawGoldPerHour = math.floor((activeSession.rawGoldDelta / activeSession.activeDuration * 3600) + 0.5)
+		activeSession.estimatedGoldPerHour = math.floor((activeSession.estimatedTotalValue / activeSession.activeDuration * 3600) + 0.5)
+	else
+		activeSession.rawGoldPerHour = 0
+		activeSession.estimatedGoldPerHour = 0
+	end
 	
 	-- Move to last session and clear active reference
 	lastSession = activeSession

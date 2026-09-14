@@ -9,4 +9,6 @@ Core.lua
 Session.lua
 Inventory.lua
 Pricing.lua
+History.lua
 SessionFrame.lua
+HistoryFrame.lua

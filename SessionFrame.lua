@@ -12,6 +12,7 @@ local sessionFrame
 local startButton
 local pauseButton
 local stopButton
+local historyButton
 local statusText
 local elapsedTimeText
 local rawGoldMetricsText
@@ -471,6 +472,9 @@ local function OnStopSession()
 	-- Stop session in data module and display summary
 	if ns.SessionStop then
 		local completedSession = ns.SessionStop(accumulatedElapsed)
+		if completedSession and ns.SaveCompletedSession then
+			ns.SaveCompletedSession(completedSession)
+		end
 		DisplaySessionSummary(completedSession)
 	end
 end
@@ -519,6 +523,17 @@ local function CreateSessionFrame()
 	statusText = sessionFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 	statusText:SetPoint("TOP", sessionFrame, "TOP", 0, -35)
 	statusText:SetText("Idle")
+
+	-- History opens the separate recent-session view.
+	historyButton = CreateFrame("Button", nil, sessionFrame, "GameMenuButtonTemplate")
+	historyButton:SetSize(75, 25)
+	historyButton:SetPoint("TOPRIGHT", sessionFrame, "TOPRIGHT", -8, -8)
+	historyButton:SetText("History")
+	historyButton:SetScript("OnClick", function()
+		if ns.ToggleHistoryFrame then
+			ns.ToggleHistoryFrame()
+		end
+	end)
 
 	-- Elapsed time display
 	elapsedTimeText = sessionFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
