@@ -12,3 +12,4 @@ Pricing.lua
 History.lua
 SessionFrame.lua
 HistoryFrame.lua
+MinimapButton.lua

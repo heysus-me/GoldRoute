@@ -25,6 +25,12 @@ local function InitializeDatabase()
 
 	GoldRouteDB.routes = GoldRouteDB.routes or {}
 	GoldRouteDB.sessions = GoldRouteDB.sessions or {}
+
+	-- Minimap button position (angle in degrees around the minimap circumference)
+	GoldRouteDB.minimap = GoldRouteDB.minimap or {}
+	if type(GoldRouteDB.minimap.angle) ~= "number" then
+		GoldRouteDB.minimap.angle = 220
+	end
 end
 
 ---
@@ -97,7 +103,12 @@ eventFrame:SetScript("OnEvent", function(self, event, loadedAddon)
 	if event == "ADDON_LOADED" and loadedAddon == addonName then
 		-- Initialize the SavedVariable database
 		InitializeDatabase()
-		
+
+		-- Create/position the minimap button now that GoldRouteDB.minimap is ready
+		if ns.InitializeMinimapButton then
+			ns.InitializeMinimapButton()
+		end
+
 		-- Unregister this event since we only need it once
 		-- https://wowpedia.fandom.com/wiki/API_Frame_UnregisterEvent
 		eventFrame:UnregisterEvent("ADDON_LOADED")
