@@ -39,6 +39,10 @@ local function CopySession(session)
 		estimatedGoldPerHour = session.estimatedGoldPerHour,
 		pricedItemTypes = session.pricedItemTypes,
 		unpricedItemTypes = session.unpricedItemTypes,
+		routeName = session.routeName,
+		zone = session.zone,
+		subzone = session.subzone,
+		mapID = session.mapID,
 	}
 end
 

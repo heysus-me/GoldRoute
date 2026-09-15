@@ -41,6 +41,36 @@ local function FormatDate(timestamp)
 	return date("%m/%d %H:%M", timestamp)
 end
 
+---
+-- Combine zone + subzone into one line; subzone supplements the zone, never replaces it
+---
+local function FormatZoneLine(zone, subzone)
+	if type(zone) ~= "string" or zone == "" then
+		return nil
+	end
+	if type(subzone) == "string" and subzone ~= "" and subzone ~= zone then
+		return zone .. " \226\128\148 " .. subzone
+	end
+	return zone
+end
+
+---
+-- Resolve the primary/secondary context lines for a saved session.
+-- Fallback order: routeName, then zone, then a generic placeholder.
+-- Older saved sessions may be missing these fields entirely; treat them as optional.
+---
+local function GetSessionContextLines(session)
+	local routeName = type(session.routeName) == "string" and session.routeName ~= "" and session.routeName or nil
+	local zoneLine = FormatZoneLine(session.zone, session.subzone)
+
+	if routeName then
+		return routeName, zoneLine
+	elseif zoneLine then
+		return zoneLine, nil
+	end
+	return "Unlabeled Session", nil
+end
+
 local function UpdateRows()
 	if not historyFrame then
 		return
@@ -60,15 +90,18 @@ local function UpdateRows()
 		local character = session.character or "Unknown"
 		local value = FormatCopper(session.estimatedTotalValue)
 		local gph = FormatCopper(session.estimatedGoldPerHour)
-		local rowText = string.format(
-			"%s  %s\n%s\nValue: %s    GPH: %s",
-			FormatDate(session.endedAt or session.startedAt),
-			character,
-			FormatDuration(session.activeDuration),
-			value,
-			gph
-		)
-		historyRows[index]:SetText(rowText)
+		local primaryContext, secondaryContext = GetSessionContextLines(session)
+
+		local lines = {
+			string.format("%s  %s", FormatDate(session.endedAt or session.startedAt), character),
+			primaryContext,
+		}
+		if secondaryContext then
+			table.insert(lines, secondaryContext)
+		end
+		table.insert(lines, string.format("%s    Value: %s    GPH: %s", FormatDuration(session.activeDuration), value, gph))
+
+		historyRows[index]:SetText(table.concat(lines, "\n"))
 	end
 end
 
@@ -93,7 +126,7 @@ end
 
 local function CreateHistoryFrame()
 	historyFrame = CreateFrame("Frame", "GoldRouteHistoryFrame", UIParent, "BackdropTemplate")
-	historyFrame:SetSize(330, 430)
+	historyFrame:SetSize(340, 560)
 	historyFrame:SetPoint("CENTER", UIParent, "CENTER", 380, 0)
 	historyFrame:SetMovable(true)
 	historyFrame:SetClampedToScreen(true)
@@ -124,8 +157,8 @@ local function CreateHistoryFrame()
 		row:SetFont("Fonts\\FRIZQT__.TTF", 10)
 		row:SetJustifyH("LEFT")
 		row:SetWordWrap(true)
-		row:SetPoint("TOPLEFT", historyFrame, "TOPLEFT", 18, -38 - ((index - 1) * 38))
-		row:SetPoint("TOPRIGHT", historyFrame, "TOPRIGHT", -18, -38 - ((index - 1) * 38))
+		row:SetPoint("TOPLEFT", historyFrame, "TOPLEFT", 18, -38 - ((index - 1) * 50))
+		row:SetPoint("TOPRIGHT", historyFrame, "TOPRIGHT", -18, -38 - ((index - 1) * 50))
 		table.insert(historyRows, row)
 	end
 

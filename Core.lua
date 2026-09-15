@@ -44,6 +44,13 @@ local function OnSlashCommand(msg)
 		if ns.GetSessionHistory then
 			print("Saved sessions: " .. #ns.GetSessionHistory())
 		end
+		local activeSession = ns.GetActiveSession and ns.GetActiveSession()
+		if activeSession then
+			print("Route: " .. (activeSession.routeName or "(none)"))
+			print("Zone: " .. (activeSession.zone or "(none)"))
+			print("Subzone: " .. (activeSession.subzone or "(none)"))
+			print("Map ID: " .. (activeSession.mapID and tostring(activeSession.mapID) or "(none)"))
+		end
 		return
 	end
 	

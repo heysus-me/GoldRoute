@@ -20,7 +20,33 @@ local function CreateSessionObject()
 		endingMoney = 0,
 		rawGoldDelta = 0,
 		items = {},
+		routeName = nil,
+		zone = nil,
+		subzone = nil,
+		mapID = nil,
 	}
+end
+
+---
+-- Normalize a user-entered route label: trim whitespace, cap length, and
+-- collapse an empty result to nil so blank labels never get stored as "".
+---
+local ROUTE_NAME_MAX_LENGTH = 50
+local function NormalizeRouteName(routeName)
+	if type(routeName) ~= "string" then
+		return nil
+	end
+
+	routeName = routeName:match("^%s*(.-)%s*$")
+	if routeName == "" then
+		return nil
+	end
+
+	if #routeName > ROUTE_NAME_MAX_LENGTH then
+		routeName = routeName:sub(1, ROUTE_NAME_MAX_LENGTH)
+	end
+
+	return routeName
 end
 
 ---
@@ -39,20 +65,40 @@ end
 ---
 -- Start a new farming session
 -- Records character metadata, wall-clock timestamp, starting money, and begins inventory tracking
+-- Accepts optional metadata as a plain routeName string or a table such as { routeName = "..." }.
+-- Zone/subzone/mapID are captured once here and are not refreshed as the player travels.
 ---
-function ns.SessionStart()
+function ns.SessionStart(metadata)
 	if activeSession then
 		-- Safety: don't overwrite active session without stopping it
 		return activeSession
 	end
-	
+
+	local routeName
+	if type(metadata) == "string" then
+		routeName = metadata
+	elseif type(metadata) == "table" then
+		routeName = metadata.routeName
+	end
+
 	activeSession = CreateSessionObject()
 	activeSession.id = GenerateSessionID()
 	activeSession.character = UnitName("player")
 	activeSession.realm = GetRealmName()
 	activeSession.startedAt = time()
 	activeSession.startingMoney = GetMoney() or 0
-	
+	activeSession.routeName = NormalizeRouteName(routeName)
+
+	-- Starting-location snapshot only; empty strings collapse to nil.
+	local zoneText = GetZoneText and GetZoneText() or nil
+	local subzoneText = GetSubZoneText and GetSubZoneText() or nil
+	activeSession.zone = (zoneText and zoneText ~= "") and zoneText or nil
+	activeSession.subzone = (subzoneText and subzoneText ~= "") and subzoneText or nil
+	if C_Map and C_Map.GetBestMapForUnit then
+		local ok, mapID = pcall(C_Map.GetBestMapForUnit, "player")
+		activeSession.mapID = (ok and type(mapID) == "number") and mapID or nil
+	end
+
 	-- Begin inventory tracking
 	if ns.InventoryStartTracking then
 		ns.InventoryStartTracking()

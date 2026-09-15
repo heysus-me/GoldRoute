@@ -14,6 +14,9 @@ local pauseButton
 local stopButton
 local historyButton
 local statusText
+local routeLabel
+local routeEditBox
+local zoneContextText
 local elapsedTimeText
 local rawGoldMetricsText
 local rawGoldPerHourText
@@ -28,6 +31,7 @@ local sessionState = STATE_IDLE
 local accumulatedElapsed = 0
 local segmentStartTime = nil
 local activeTicker = nil
+local routeEditBoxLocked = false
 
 ---
 -- Format elapsed seconds as HH:MM:SS
@@ -77,6 +81,37 @@ local function FormatCopper(copper)
 	end
 
 	return result
+end
+
+---
+-- Build the "Zone: X" / "Zone: X — Y" contextual line from session data
+-- Returns "" when no zone was captured (e.g. very old sessions)
+---
+local function BuildZoneContextText(session)
+	if not session or not session.zone then
+		return ""
+	end
+
+	if session.subzone and session.subzone ~= session.zone then
+		return "Zone: " .. session.zone .. " \226\128\148 " .. session.subzone
+	end
+
+	return "Zone: " .. session.zone
+end
+
+---
+-- Lock/unlock the route-name EditBox
+-- Editable only while IDLE or STOPPED; locked while RUNNING or PAUSED
+---
+local function SetRouteEditBoxLocked(locked)
+	routeEditBoxLocked = locked
+	routeEditBox:EnableMouse(not locked)
+	if locked then
+		routeEditBox:ClearFocus()
+		routeEditBox:SetTextColor(0.6, 0.6, 0.6)
+	else
+		routeEditBox:SetTextColor(1, 1, 1)
+	end
 end
 
 ---
@@ -412,10 +447,13 @@ local function OnStartSession()
 	statusText:SetText("Running")
 	ClearSessionSummary()
 
-	-- Start session in data module
+	-- Start session in data module, passing the user-entered route label
+	local newSession
 	if ns.SessionStart then
-		ns.SessionStart()
+		newSession = ns.SessionStart({ routeName = routeEditBox:GetText() })
 	end
+	zoneContextText:SetText(BuildZoneContextText(newSession))
+	SetRouteEditBoxLocked(true)
 
 	UpdateElapsedDisplay()
 	UpdateLiveMetrics()
@@ -476,7 +514,11 @@ local function OnStopSession()
 			ns.SaveCompletedSession(completedSession)
 		end
 		DisplaySessionSummary(completedSession)
+		zoneContextText:SetText(BuildZoneContextText(completedSession))
 	end
+
+	-- Route text remains for the user to reuse the same label on the next session
+	SetRouteEditBoxLocked(false)
 end
 
 ---
@@ -535,34 +577,57 @@ local function CreateSessionFrame()
 		end
 	end)
 
+	-- Route label/input: editable only while IDLE or STOPPED (see SetRouteEditBoxLocked)
+	routeLabel = sessionFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	routeLabel:SetPoint("TOPLEFT", sessionFrame, "TOPLEFT", 20, -58)
+	routeLabel:SetText("Route:")
+
+	routeEditBox = CreateFrame("EditBox", nil, sessionFrame, "InputBoxTemplate")
+	routeEditBox:SetAutoFocus(false)
+	routeEditBox:SetMaxLetters(50)
+	routeEditBox:SetSize(220, 20)
+	routeEditBox:SetPoint("LEFT", routeLabel, "RIGHT", 8, -1)
+	routeEditBox:SetScript("OnEscapePressed", function(box) box:ClearFocus() end)
+	routeEditBox:SetScript("OnEnterPressed", function(box) box:ClearFocus() end)
+	routeEditBox:SetScript("OnEditFocusGained", function(box)
+		if routeEditBoxLocked then
+			box:ClearFocus()
+		end
+	end)
+
+	-- Zone/subzone captured at session start; not refreshed as the player travels
+	zoneContextText = sessionFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	zoneContextText:SetPoint("TOP", sessionFrame, "TOP", 0, -80)
+	zoneContextText:SetText("")
+
 	-- Elapsed time display
 	elapsedTimeText = sessionFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	elapsedTimeText:SetPoint("TOP", sessionFrame, "TOP", 0, -60)
+	elapsedTimeText:SetPoint("TOP", sessionFrame, "TOP", 0, -104)
 	elapsedTimeText:SetText("00:00:00")
 
 	-- Raw Gold metrics text
 	rawGoldMetricsText = sessionFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	rawGoldMetricsText:SetPoint("TOP", sessionFrame, "TOP", 0, -85)
+	rawGoldMetricsText:SetPoint("TOP", sessionFrame, "TOP", 0, -129)
 	rawGoldMetricsText:SetText("")
 
 	-- Raw Gold / Hour text
 	rawGoldPerHourText = sessionFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	rawGoldPerHourText:SetPoint("TOP", sessionFrame, "TOP", 0, -105)
+	rawGoldPerHourText:SetPoint("TOP", sessionFrame, "TOP", 0, -149)
 	rawGoldPerHourText:SetText("")
 
 	-- Item Value text
 	itemValueText = sessionFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	itemValueText:SetPoint("TOP", sessionFrame, "TOP", 0, -125)
+	itemValueText:SetPoint("TOP", sessionFrame, "TOP", 0, -169)
 	itemValueText:SetText("")
 
 	-- Estimated Gold / Hour text
 	estimatedGoldPerHourText = sessionFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	estimatedGoldPerHourText:SetPoint("TOP", sessionFrame, "TOP", 0, -145)
+	estimatedGoldPerHourText:SetPoint("TOP", sessionFrame, "TOP", 0, -189)
 	estimatedGoldPerHourText:SetText("")
 
 	-- Items Acquired header
 	itemsHeaderText = sessionFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	itemsHeaderText:SetPoint("TOPLEFT", sessionFrame, "TOPLEFT", 20, -170)
+	itemsHeaderText:SetPoint("TOPLEFT", sessionFrame, "TOPLEFT", 20, -214)
 	itemsHeaderText:SetText("")
 
 	-- Item display strings (up to 8 items + 1 "more" line)
@@ -571,7 +636,7 @@ local function CreateSessionFrame()
 		local itemText = sessionFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 		itemText:SetFont("Fonts\\FRIZQT__.TTF", 10)
 		itemText:SetJustifyH("LEFT")
-		local yOffset = -190 - ((i - 1) * 16)
+		local yOffset = -234 - ((i - 1) * 16)
 		itemText:SetPoint("TOPLEFT", sessionFrame, "TOPLEFT", 20, yOffset)
 		itemText:SetPoint("TOPRIGHT", sessionFrame, "TOPRIGHT", -20, yOffset)
 		itemText:SetText("")
