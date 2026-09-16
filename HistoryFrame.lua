@@ -1,4 +1,4 @@
--- GoldRoute recent session history view
+-- GoldLedger recent session history view
 local addonName, ns = ...
 
 local historyFrame
@@ -125,7 +125,7 @@ function ns.ToggleHistoryFrame()
 end
 
 local function CreateHistoryFrame()
-	historyFrame = CreateFrame("Frame", "GoldRouteHistoryFrame", UIParent, "BackdropTemplate")
+	historyFrame = CreateFrame("Frame", "GoldLedgerHistoryFrame", UIParent, "BackdropTemplate")
 	historyFrame:SetSize(340, 560)
 	historyFrame:SetPoint("CENTER", UIParent, "CENTER", 380, 0)
 	historyFrame:SetMovable(true)

@@ -1,4 +1,4 @@
--- GoldRoute Inventory Tracking
+-- GoldLedger Inventory Tracking
 local addonName, ns = ...
 
 local isTracking = false
@@ -162,10 +162,10 @@ end
 
 ---
 -- Debug print: show current inventory tracking state
--- Called by Core.lua when user runs /goldroute debug
+-- Called by Core.lua when user runs /goldledger debug
 ---
 function ns.InventoryDebugPrint()
-	print("GoldRoute inventory tracking: " .. tostring(isTracking))
+	print("GoldLedger inventory tracking: " .. tostring(isTracking))
 	
 	local itemList = {}
 	for itemID, quantity in pairs(acquiredItems) do

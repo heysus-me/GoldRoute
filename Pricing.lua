@@ -30,7 +30,7 @@ local function LookupAuctionatorPrice(itemID)
 	-- Only protect the external API call, not our logic
 	local ok, price = pcall(
 		Auctionator.API.v1.GetAuctionPriceByItemID,
-		"GoldRoute",
+		"GoldLedger",
 		itemID
 	)
 

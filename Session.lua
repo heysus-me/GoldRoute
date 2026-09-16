@@ -1,4 +1,4 @@
--- GoldRoute Session Data Management
+-- GoldLedger Session Data Management
 local addonName, ns = ...
 
 local activeSession = nil
@@ -7,6 +7,7 @@ local sessionCounter = 0
 
 ---
 -- Create a new session object with default values
+-- New sessions include generic activity metadata for future expansion beyond gathering
 ---
 local function CreateSessionObject()
 	return {
@@ -20,11 +21,35 @@ local function CreateSessionObject()
 		endingMoney = 0,
 		rawGoldDelta = 0,
 		items = {},
+		-- Activity classification (gathering, crafting, etc.)
+		activityType = "gathering",
+		-- Generic activity metadata (will expand as more activity types are supported)
+		activity = {
+			profession = nil,
+			zone = nil,
+			subzone = nil,
+			mapID = nil,
+		},
+		-- Unique human-readable session identifier
+		sessionName = nil,
+		-- Legacy fields (preserved for backward compatibility during migration)
 		routeName = nil,
 		zone = nil,
 		subzone = nil,
 		mapID = nil,
 	}
+end
+
+---
+-- Generate an automatic session name from zone and timestamp
+-- Format: Zone-Activity-YYYY-MM-DDTHH-MM-SS (ISO-like, filename-safe)
+-- Example: Isle of Dorn-Gathering-2026-09-16T21-42-31
+---
+local function GenerateSessionName(zone, activityType)
+	local timestamp = os.date("!%Y-%m-%dT%H-%M-%S")
+	local activity = activityType or "Gathering"
+	local location = zone or "Unknown"
+	return location .. "-" .. activity .. "-" .. timestamp
 end
 
 ---
@@ -67,6 +92,7 @@ end
 -- Records character metadata, wall-clock timestamp, starting money, and begins inventory tracking
 -- Accepts optional metadata as a plain routeName string or a table such as { routeName = "..." }.
 -- Zone/subzone/mapID are captured once here and are not refreshed as the player travels.
+-- Populates both legacy fields and new activity model for backward compatibility.
 ---
 function ns.SessionStart(metadata)
 	if activeSession then
@@ -98,6 +124,16 @@ function ns.SessionStart(metadata)
 		local ok, mapID = pcall(C_Map.GetBestMapForUnit, "player")
 		activeSession.mapID = (ok and type(mapID) == "number") and mapID or nil
 	end
+
+	-- Populate activity metadata (mirrors legacy fields during this migration phase)
+	if activeSession.activity then
+		activeSession.activity.zone = activeSession.zone
+		activeSession.activity.subzone = activeSession.subzone
+		activeSession.activity.mapID = activeSession.mapID
+	end
+
+	-- Generate automatic session name from location and timestamp
+	activeSession.sessionName = GenerateSessionName(activeSession.zone, "Gathering")
 
 	-- Begin inventory tracking
 	if ns.InventoryStartTracking then

@@ -1,15 +1,16 @@
 ## Interface: 120100
-## Title: GoldRoute
+## Title: GoldLedger
 ## Author: 
 ## Version: 1.0.0
-## SavedVariables: GoldRouteDB
-## Notes: A World of Warcraft addon for gold farming route tracking and optimization.
+## SavedVariables: GoldLedgerDB, GoldRouteDB
+## Notes: Gold-making activity tracking, valuation, and profitability analysis.
 
 Core.lua
 Session.lua
 Inventory.lua
 Pricing.lua
 History.lua
+Crafting.lua
 SessionFrame.lua
 HistoryFrame.lua
 MinimapButton.lua

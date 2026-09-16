@@ -1,12 +1,12 @@
--- GoldRoute completed-session history
+-- GoldLedger completed-session history
 local addonName, ns = ...
 
 local MAX_SESSIONS = 100
 
 local function GetSessionsTable()
-	GoldRouteDB = GoldRouteDB or {}
-	GoldRouteDB.sessions = GoldRouteDB.sessions or {}
-	return GoldRouteDB.sessions
+	GoldLedgerDB = GoldLedgerDB or {}
+	GoldLedgerDB.sessions = GoldLedgerDB.sessions or {}
+	return GoldLedgerDB.sessions
 end
 
 local function CopyItems(items)

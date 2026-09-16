@@ -1,4 +1,4 @@
--- GoldRoute native minimap button (no LibDataBroker/LibDBIcon dependency)
+-- GoldLedger native minimap button (no LibDataBroker/LibDBIcon dependency)
 local addonName, ns = ...
 
 local minimapButton
@@ -8,8 +8,8 @@ local RADIUS = 80
 -- Persist the button's angle around the minimap circumference
 ---
 local function SaveMinimapButtonAngle(angle)
-	GoldRouteDB.minimap = GoldRouteDB.minimap or {}
-	GoldRouteDB.minimap.angle = angle
+	GoldLedgerDB.minimap = GoldLedgerDB.minimap or {}
+	GoldLedgerDB.minimap.angle = angle
 end
 
 ---
@@ -21,7 +21,7 @@ local function UpdateMinimapButtonPosition()
 		return
 	end
 
-	local angle = (GoldRouteDB and GoldRouteDB.minimap and GoldRouteDB.minimap.angle) or 220
+	local angle = (GoldLedgerDB and GoldLedgerDB.minimap and GoldLedgerDB.minimap.angle) or 220
 	local radians = math.rad(angle)
 	local x = math.cos(radians) * RADIUS
 	local y = math.sin(radians) * RADIUS
@@ -50,7 +50,7 @@ local function CreateMinimapButton()
 		return minimapButton
 	end
 
-	minimapButton = CreateFrame("Button", "GoldRouteMinimapButton", Minimap)
+	minimapButton = CreateFrame("Button", "GoldLedgerMinimapButton", Minimap)
 	minimapButton:SetSize(31, 31)
 	minimapButton:SetFrameStrata("MEDIUM")
 	minimapButton:SetFrameLevel(8)
@@ -103,7 +103,7 @@ local function CreateMinimapButton()
 
 	minimapButton:SetScript("OnEnter", function(self)
 		GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-		GameTooltip:AddLine("GoldRoute")
+		GameTooltip:AddLine("GoldLedger")
 		GameTooltip:AddLine("Left-click: Toggle tracker", 1, 1, 1)
 		GameTooltip:AddLine("Right-click: Toggle history", 1, 1, 1)
 		GameTooltip:Show()
@@ -117,7 +117,7 @@ end
 
 ---
 -- Create (if needed) and position the minimap button
--- Called from Core.lua once GoldRouteDB.minimap has been initialized
+-- Called from Core.lua once GoldLedgerDB.minimap has been initialized
 ---
 function ns.InitializeMinimapButton()
 	if not Minimap then

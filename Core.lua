@@ -1,4 +1,4 @@
--- GoldRoute - Core addon initialization
+-- GoldLedger - Core addon initialization
 -- Standard WoW addon namespace pattern: (addonName, namespace_table)
 -- https://wowpedia.fandom.com/wiki/Using_shared_data_across_addons
 local addonName, ns = ...
@@ -7,35 +7,82 @@ local addonName, ns = ...
 local ADDON_VERSION = "1.0.0"
 
 ---
+-- Migrate legacy GoldRouteDB data to GoldLedgerDB
+-- Preserves all session history and settings
+-- GoldLedgerDB takes precedence; only missing fields are populated from GoldRouteDB
+---
+local function MigrateLegacyDatabase()
+	-- Ensure GoldLedgerDB exists
+	if not GoldLedgerDB then
+		GoldLedgerDB = {}
+	end
+
+	-- If GoldRouteDB exists and has data, migrate it
+	if GoldRouteDB and type(GoldRouteDB) == "table" then
+		-- Migrate basic fields if missing
+		if not GoldLedgerDB.initialized and GoldRouteDB.initialized then
+			GoldLedgerDB.initialized = GoldRouteDB.initialized
+		end
+
+		-- Migrate routes if missing
+		if not GoldLedgerDB.routes and GoldRouteDB.routes then
+			GoldLedgerDB.routes = GoldRouteDB.routes
+		end
+
+		-- Migrate sessions if missing (most important for history preservation)
+		if not GoldLedgerDB.sessions and GoldRouteDB.sessions then
+			GoldLedgerDB.sessions = GoldRouteDB.sessions
+		end
+
+		-- Migrate minimap settings if missing
+		if not GoldLedgerDB.minimap and GoldRouteDB.minimap then
+			GoldLedgerDB.minimap = GoldRouteDB.minimap
+		end
+
+		-- Mark migration as complete (one-time operation)
+		GoldLedgerDB.schemaVersion = 1
+		GoldLedgerDB.migratedFromGoldRoute = true
+	end
+end
+
+---
 -- Initialize the SavedVariable database
--- SavedVariable 'GoldRouteDB' is declared in the .toc file.
--- It persists across game sessions and is account-wide.
+-- SavedVariables 'GoldLedgerDB' and 'GoldRouteDB' are declared in the .toc file.
+-- They persist across game sessions and are account-wide.
 -- https://wowpedia.fandom.com/wiki/SavedVariables
 ---
 local function InitializeDatabase()
-	-- Check if GoldRouteDB exists (it will be auto-created by WoW as empty table if not)
-	if not GoldRouteDB then
-		GoldRouteDB = {}
+	-- Migrate legacy GoldRouteDB if present
+	MigrateLegacyDatabase()
+
+	-- Ensure GoldLedgerDB is properly initialized
+	if not GoldLedgerDB then
+		GoldLedgerDB = {}
 	end
 
 	-- Initialize db structure on first load
-	if not GoldRouteDB.initialized then
-		GoldRouteDB.initialized = true
+	if not GoldLedgerDB.initialized then
+		GoldLedgerDB.initialized = true
 	end
 
-	GoldRouteDB.routes = GoldRouteDB.routes or {}
-	GoldRouteDB.sessions = GoldRouteDB.sessions or {}
+	GoldLedgerDB.routes = GoldLedgerDB.routes or {}
+	GoldLedgerDB.sessions = GoldLedgerDB.sessions or {}
 
 	-- Minimap button position (angle in degrees around the minimap circumference)
-	GoldRouteDB.minimap = GoldRouteDB.minimap or {}
-	if type(GoldRouteDB.minimap.angle) ~= "number" then
-		GoldRouteDB.minimap.angle = 220
+	GoldLedgerDB.minimap = GoldLedgerDB.minimap or {}
+	if type(GoldLedgerDB.minimap.angle) ~= "number" then
+		GoldLedgerDB.minimap.angle = 220
+	end
+
+	-- Initialize schema version if not present
+	if not GoldLedgerDB.schemaVersion then
+		GoldLedgerDB.schemaVersion = 1
 	end
 end
 
 ---
 -- Slash command handler - toggles session frame, prints addon info, or shows debug
--- Called when user types /goldroute or /goldroute debug
+-- Called when user types /goldledger, /goldroute, or either variant with debug argument
 -- https://wowpedia.fandom.com/wiki/SlashCmdList
 ---
 local function OnSlashCommand(msg)
@@ -71,13 +118,15 @@ local function OnSlashCommand(msg)
 end
 
 ---
--- Register the slash command
+-- Register the slash commands
 -- SLASH_<COMMAND>N where N is 1, 2, 3... for multiple slash commands
 -- SlashCmdList.<COMMAND> = function to call when slash command is used
 -- https://wowpedia.fandom.com/wiki/SlashCmdList
+-- Primary command is /goldledger; /goldroute is a legacy alias
 ---
-SLASH_GOLDROUTE1 = "/goldroute"
-SlashCmdList.GOLDROUTE = OnSlashCommand
+SLASH_GOLDLEDGER1 = "/goldledger"
+SLASH_GOLDLEDGER2 = "/goldroute"
+SlashCmdList.GOLDLEDGER = OnSlashCommand
 
 ---
 -- Event frame setup
@@ -104,7 +153,7 @@ eventFrame:SetScript("OnEvent", function(self, event, loadedAddon)
 		-- Initialize the SavedVariable database
 		InitializeDatabase()
 
-		-- Create/position the minimap button now that GoldRouteDB.minimap is ready
+		-- Create/position the minimap button now that GoldLedgerDB.minimap is ready
 		if ns.InitializeMinimapButton then
 			ns.InitializeMinimapButton()
 		end

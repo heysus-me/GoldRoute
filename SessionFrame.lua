@@ -1,4 +1,4 @@
--- GoldRoute Session Frame - UI and session timer management
+-- GoldLedger Session Frame - UI and session timer management
 local addonName, ns = ...
 
 -- Session states
@@ -520,7 +520,7 @@ end
 -- Create the compact session UI frame
 ---
 local function CreateSessionFrame()
-	sessionFrame = CreateFrame("Frame", "GoldRouteSessionFrame", UIParent, "BackdropTemplate")
+	sessionFrame = CreateFrame("Frame", "GoldLedgerSessionFrame", UIParent, "BackdropTemplate")
 
 	-- Set frame size and position
 	sessionFrame:SetSize(FRAME_WIDTH, COLLAPSED_HEIGHT)
@@ -553,7 +553,7 @@ local function CreateSessionFrame()
 	-- Title row: addon name (left) + current state (right)
 	local titleText = sessionFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 	titleText:SetPoint("TOPLEFT", sessionFrame, "TOPLEFT", 14, -10)
-	titleText:SetText("GoldRoute")
+	titleText:SetText("GoldLedger")
 
 	statusText = sessionFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 	statusText:SetPoint("TOPRIGHT", sessionFrame, "TOPRIGHT", -14, -12)
@@ -696,7 +696,7 @@ end
 
 ---
 -- Toggle session frame visibility
--- Called from Core.lua via /goldroute slash command and from the minimap button
+-- Called from Core.lua via /goldledger slash command and from the minimap button
 ---
 function ns.ToggleSessionFrame()
 	if not sessionFrame then
